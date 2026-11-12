@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Royal Break | 3D Pool</title>
+<style>
+:root{--gold:#e5bd70;--ink:#080d0c;--panel:#101a17;--muted:#9eaaa3;--line:#293a33}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(circle at 50% 30%,#1c3028,#070b09 70%);font-family:Inter,system-ui,Segoe UI,Arial;color:#f5f4ee}
+#game{position:fixed;inset:0}canvas{display:block;width:100%;height:100%}
+.hud{position:fixed;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:clamp(12px,2vw,26px)}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.brand{font-weight:900;letter-spacing:.18em;font-size:clamp(14px,2vw,20px)}.brand span{color:var(--gold)}.sub{font-size:10px;color:var(--muted);letter-spacing:.22em;margin-top:4px}
+.pill{background:#0b1411d9;border:1px solid var(--line);border-radius:14px;padding:10px 14px;backdrop-filter:blur(12px);font-size:12px;color:#d9e2dc}
+.bottom{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}.hint{font-size:12px;color:#c0cbc4;background:#0b1411c9;border:1px solid var(--line);padding:10px 13px;border-radius:12px;max-width:340px}
+.controls{pointer-events:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+button,select{background:#111d18;color:#f5f4ee;border:1px solid #34483e;border-radius:10px;padding:10px 13px;font-weight:700;font-size:12px;cursor:pointer}
+button:hover,select:hover{border-color:var(--gold)}button.primary{background:linear-gradient(135deg,#e6c47d,#a87b36);color:#17130b;border:0}
+#power{width:110px;accent-color:var(--gold)}
+#menu{position:fixed;inset:0;display:grid;place-items:center;background:linear-gradient(135deg,#050907eF,#0d1b15eF);z-index:5;padding:20px}
+.card{width:min(560px,100%);background:linear-gradient(145deg,#14231c,#0a100d);border:1px solid #425749;border-radius:24px;padding:clamp(22px,5vw,40px);box-shadow:0 30px 100px #000a}
+.eyebrow{color:var(--gold);font-size:10px;letter-spacing:.3em;font-weight:900}.card h1{font-size:clamp(34px,8vw,58px);line-height:.95;margin:12px 0 10px;letter-spacing:-.05em}.card p{color:#b7c3bb;line-height:1.6;font-size:14px}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:24px 0}.mode{padding:18px;text-align:left;border-radius:16px;background:#0b1510;border:1px solid #31473a}.mode strong{display:block;font-size:20px;color:var(--gold);margin-bottom:5px}.mode small{color:#aab8ae}
+#status{position:fixed;left:50%;top:18%;transform:translateX(-50%);background:#07110de8;border:1px solid #415a49;border-radius:99px;padding:10px 18px;font-size:12px;color:#e9d39d;pointer-events:none;opacity:0;transition:opacity .25s}
+@media(max-width:650px){.bottom{align-items:flex-end}.hint{max-width:170px;font-size:10px}.controls{max-width:58%}button,select{padding:9px 10px;font-size:11px}#power{width:76px}.top .pill{font-size:10px;padding:8px}}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div class="hud">
+ <div class="top">
+  <div><div class="brand">ROYAL <span>BREAK</span></div><div class="sub">3D BILLIARDS CLUB</div></div>
+  <div class="pill"><b id="modeLabel">8 BALL</b> &nbsp;·&nbsp; <span id="turnLabel">YOUR TURN</span></div>
+ </div>
+ <div class="bottom">
+  <div class="hint" id="hint">Drag from the cue ball to aim. Release to shoot.</div>
+  <div class="controls">
+   <select id="camera" aria-label="Camera angle">
+    <option value="angled">Angled view</option><option value="top">Top-down view</option><option value="side">Side view</option><option value="free">Free camera</option>
+   </select>
+   <label class="pill">POWER <input id="power" type="range" min="1" max="100" value="55"></label>
+   <button id="reset">RACK</button>
+   <button id="menuBtn">MENU</button>
+  </div>
+ </div>
+</div>
+<div id="status"></div>
+<div id="menu">
+ <div class="card">
+  <div class="eyebrow">THE DIGITAL POOL HALL</div>
+  <h1>ROYAL<br><span style="color:var(--gold)">BREAK.</span></h1>
+  <p>Choose your table game. Switch camera angles whenever you like, from overhead precision to a cinematic angled view.</p>
+  <div class="modes">
+   <button class="mode" data-mode="8"><strong>8 BALL</strong><small>Classic stripes, solids and the black eight.</small></button>
+   <button class="mode" data-mode="9"><strong>9 BALL</strong><small>Clear the balls in numerical order.</small></button>
+  </div>
+  <button class="primary" id="practice" style="width:100%;padding:15px">START PRACTICE TABLE</button>
+  <p style="font-size:11px;margin-bottom:0">Prototype build · Single-player practice foundation</p>
+ </div>
+</div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
+import {MTLLoader} from 'three/addons/loaders/MTLLoader.js';
+
+const host=document.getElementById('game');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x08100c);
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.01,100);
+camera.position.set(2.6,2.45,3.3);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;
+host.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xc9e7d6,0x172018,2.0));
+const key=new THREE.DirectionalLight(0xffe5bd,3.1);key.position.set(-2,5,3);key.castShadow=true;key.shadow.mapSize.set(2048,2048);scene.add(key);
+const fill=new THREE.PointLight(0x75b7a0,35,10);fill.position.set(2,2,-2);scene.add(fill);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,.55,0);controls.minDistance=1.6;controls.maxDistance=7;controls.maxPolarAngle=Math.PI*.48;
+let table=null, tableReady=false, mode='8', balls=[], cueBall=null, aiming=false, aimStart=null, aimLine=null, shotBusy=false;
+const ballGroup=new THREE.Group();scene.add(ballGroup);
+const ballR=.035, tableY=.765, halfX=.88, halfZ=.405;
+const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2();
+const matBall=(color)=>new THREE.MeshStandardMaterial({color,roughness:.19,metalness:.03});
+const ballColors={1:0xffd21a,2:0x1767d2,3:0xd52228,4:0x6a2d91,5:0xf17b18,6:0x138b50,7:0x7d1824,8:0x101010,9:0xffd21a,10:0x1767d2,11:0xd52228,12:0x6a2d91,13:0xf17b18,14:0x138b50,15:0x7d1824};
+function makeBall(n,x,z){
+ const g=new THREE.Group();
+ const sphere=new THREE.Mesh(new THREE.SphereGeometry(ballR,32,24),matBall(ballColors[n]||0xffffff));sphere.castShadow=true;sphere.receiveShadow=true;g.add(sphere);
+ if(n!==0){
+  const patch=new THREE.Mesh(new THREE.CircleGeometry(ballR*.43,32),new THREE.MeshBasicMaterial({color:0xffffff}));
+  patch.rotation.x=-Math.PI/2;patch.position.y=ballR*.88;g.add(patch);
+  const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(64,64,55,0,Math.PI*2);ctx.fill();ctx.fillStyle='#111';ctx.font='bold 68px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(n,64,68);
+  const tex=new THREE.CanvasTexture(canvas);const label=new THREE.Mesh(new THREE.CircleGeometry(ballR*.27,32),new THREE.MeshBasicMaterial({map:tex,transparent:true}));label.rotation.x=-Math.PI/2;label.position.y=ballR*.905;g.add(label);
+ }
+ g.position.set(x,tableY+ballR,z);ballGroup.add(g);
+ return {n,mesh:g,x,z,vx:0,vz:0,active:true};
+}
+function clearBalls(){while(ballGroup.children.length)ballGroup.remove(ballGroup.children[0]);balls=[];cueBall=null}
+function rack(){
+ clearBalls();const order=mode==='8'?[1,9,2,10,8,3,11,4,12,5,13,6,14,7,15]:[1,2,3,4,5,6,7,8,9];
+ const spacing=ballR*2.04;let k=0;
+ for(let row=0;row<(mode==='8'?5:4);row++){for(let col=0;col<=row;col++){if(k>=order.length)break;const x=.40+row*spacing*.87;const z=(col-row/2)*spacing;balls.push(makeBall(order[k++],x,z));}}
+ cueBall=makeBall(0,-.48,0);balls.push(cueBall);shotBusy=false;document.getElementById('turnLabel').textContent='YOUR TURN';say('Rack ready. Drag from the cue ball to aim.');
+}
+function say(t){const el=document.getElementById('status');el.textContent=t;el.style.opacity=1;clearTimeout(say.timer);say.timer=setTimeout(()=>el.style.opacity=0,1900)}
+function fallbackTable(){
+ const group=new THREE.Group();
+ const base=new THREE.Mesh(new THREE.BoxGeometry(2.12,.12,1.22),new THREE.MeshStandardMaterial({color:0x392519,roughness:.55}));base.position.y=.58;base.castShadow=true;base.receiveShadow=true;group.add(base);
+ const felt=new THREE.Mesh(new THREE.BoxGeometry(1.88,.035,.98),new THREE.MeshStandardMaterial({color:0x075638,roughness:.92}));felt.position.y=.66;group.add(felt);
+ for(const x of [-.99,.99])for(const z of [-.52,.52]){const rail=new THREE.Mesh(new THREE.BoxGeometry(.12,.12,1.2),new THREE.MeshStandardMaterial({color:0x57351f}));rail.position.set(x,.69,0);group.add(rail)}
+ for(const z of [-.52,.52]){const rail=new THREE.Mesh(new THREE.BoxGeometry(2.05,.12,.12),new THREE.MeshStandardMaterial({color:0x57351f}));rail.position.set(0,.69,z);group.add(rail)}
+ return group;
+}
+async function loadTable(){
+ try{
+  const mtl=await new MTLLoader().setPath('./assets/').loadAsync('PoolTable.mtl');mtl.preload();
+  table=await new OBJLoader().setMaterials(mtl).setPath('./assets/').loadAsync('PoolTable.obj');
+  const box=new THREE.Box3().setFromObject(table), size=box.getSize(new THREE.Vector3()), center=box.getCenter(new THREE.Vector3());
+  table.position.sub(center);table.position.y+=.58-center.y;
+  table.scale.setScalar(1.0);
+  table.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;if(o.material){o.material.side=THREE.DoubleSide;o.material.needsUpdate=true}}});
+  scene.add(table);tableReady=true;say('Your 3D table model loaded.');
+ }catch(e){console.warn('Could not load supplied OBJ/MTL. Using fallback table.',e);table=fallbackTable();scene.add(table);say('Using backup table. Check that both model files are in /assets/.')}
+}
+function setCamera(v){
+ controls.enabled=v==='free';
+ if(v==='top'){camera.position.set(0,4.2,.001);controls.enabled=true;controls.maxPolarAngle=Math.PI*.49}
+ else if(v==='side'){camera.position.set(3.7,1.55,.05);controls.enabled=true;controls.maxPolarAngle=Math.PI*.49}
+ else if(v==='angled'){camera.position.set(2.6,2.45,3.3);controls.enabled=true;controls.maxPolarAngle=Math.PI*.49}
+ controls.target.set(0,.62,0);controls.update();
+}
+document.getElementById('camera').addEventListener('change',e=>setCamera(e.target.value));
+function start(m){mode=m;document.getElementById('modeLabel').textContent=m==='8'?'8 BALL':'9 BALL';document.getElementById('menu').style.display='none';rack()}
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>start(b.dataset.mode)));
+document.getElementById('practice').onclick=()=>start('8');
+document.getElementById('reset').onclick=rack;
+document.getElementById('menuBtn').onclick=()=>document.getElementById('menu').style.display='grid';
+function projectPointer(e){const r=renderer.domElement.getBoundingClientRect();pointer.x=((e.clientX-r.left)/r.width)*2-1;pointer.y=-((e.clientY-r.top)/r.height)*2+1;raycaster.setFromCamera(pointer,camera);const plane=new THREE.Plane(new THREE.Vector3(0,1,0),-tableY-ballR);const p=new THREE.Vector3();raycaster.ray.intersectPlane(plane,p);return p}
+function nearestCue(p){return Math.hypot(p.x-cueBall.x,p.z-cueBall.z)<.18}
+renderer.domElement.addEventListener('pointerdown',e=>{if(!cueBall||shotBusy)return;const p=projectPointer(e);if(nearestCue(p)){aiming=true;aimStart=p;renderer.domElement.setPointerCapture(e.pointerId)}});
+renderer.domElement.addEventListener('pointermove',e=>{if(!aiming)return;const p=projectPointer(e);drawAim(p)});
+renderer.domElement.addEventListener('pointerup',e=>{if(!aiming)return;const p=projectPointer(e);const dx=cueBall.x-p.x,dz=cueBall.z-p.z;const len=Math.hypot(dx,dz);if(len>.025){const power=Number(document.getElementById('power').value)/100;cueBall.vx=(dx/len)*power*2.6;cueBall.vz=(dz/len)*power*2.6;shotBusy=true;document.getElementById('hint').textContent='Shot in motion...';}aiming=false;removeAim()});
+function drawAim(p){removeAim();const dx=cueBall.x-p.x,dz=cueBall.z-p.z,len=Math.hypot(dx,dz);if(len<.01)return;const geom=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(cueBall.x,tableY+.01,cueBall.z),new THREE.Vector3(cueBall.x+dx/len*.8,tableY+.01,cueBall.z+dz/len*.8)]);aimLine=new THREE.Line(geom,new THREE.LineDashedMaterial({color:0xf2d28d,dashSize:.06,gapSize:.035}));aimLine.computeLineDistances();scene.add(aimLine)}
+function removeAim(){if(aimLine){scene.remove(aimLine);aimLine.geometry.dispose();aimLine=null}}
+const pockets=[[-.91,-.49],[0,-.49],[.91,-.49],[-.91,.49],[0,.49],[.91,.49]];
+function updatePhysics(dt){
+ const friction=Math.pow(.985,dt*60), limitX=.88-ballR,limitZ=.405-ballR;
+ for(const b of balls){if(!b.active)continue;b.x+=b.vx*dt;b.z+=b.vz*dt;b.vx*=friction;b.vz*=friction;
+  if(Math.abs(b.vx)+Math.abs(b.vz)<.012){b.vx=0;b.vz=0}
+  if(b.x>limitX){b.x=limitX;b.vx=-Math.abs(b.vx)*.78}if(b.x< -limitX){b.x=-limitX;b.vx=Math.abs(b.vx)*.78}
+  if(b.z>limitZ){b.z=limitZ;b.vz=-Math.abs(b.vz)*.78}if(b.z< -limitZ){b.z=-limitZ;b.vz=Math.abs(b.vz)*.78}
+  for(const [px,pz] of pockets){if(Math.hypot(b.x-px,b.z-pz)<.066){b.active=false;b.mesh.visible=false;b.vx=b.vz=0;if(b.n===0){say('Cue ball pocketed. Foul!');}else{say('Ball '+b.n+' pocketed.');}}}
+  b.mesh.position.set(b.x,tableY+ballR,b.z);
+ }
+ // Equal-mass sphere collision response in the table plane.
+ for(let i=0;i<balls.length;i++)for(let j=i+1;j<balls.length;j++){const a=balls[i],b=balls[j];if(!a.active||!b.active)continue;let dx=b.x-a.x,dz=b.z-a.z,d=Math.hypot(dx,dz),min=ballR*2;if(d>0&&d<min){const nx=dx/d,nz=dz/d,overlap=min-d;a.x-=nx*overlap/2;a.z-=nz*overlap/2;b.x+=nx*overlap/2;b.z+=nz*overlap/2;const rel=(a.vx-b.vx)*nx+(a.vz-b.vz)*nz;if(rel>0){a.vx-=rel*nx;a.vz-=rel*nz;b.vx+=rel*nx;b.vz+=rel*nz}a.mesh.position.set(a.x,tableY+ballR,a.z);b.mesh.position.set(b.x,tableY+ballR,b.z)}}
+ if(shotBusy&&balls.every(b=>!b.active||(Math.abs(b.vx)+Math.abs(b.vz)<.012))){shotBusy=false;document.getElementById('hint').textContent='Drag from the cue ball to aim. Release to shoot.';document.getElementById('turnLabel').textContent='YOUR TURN';}
+}
+let last=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-last)/1000,.033);last=now;if(shotBusy)updatePhysics(dt);controls.update();renderer.render(scene,camera)}requestAnimationFrame(animate);
+loadTable().then(()=>{rack();setCamera('angled')});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body>
+</html>
